@@ -163,6 +163,9 @@
 #   $apm_env
 #       String defining the environment for the APM traces
 #       String. Default: empty
+#   $process_agent_enabled
+#       Boolean to enable the process/container agent
+#       Boolean. Default: false
 #
 # Actions:
 #
@@ -256,8 +259,10 @@ class datadog_agent(
   $package_name = $datadog_agent::params::package_name,
   $dd_user = $datadog_agent::params::dd_user,
   $dd_group = $datadog_agent::params::dd_group,
+  $dd_groups = $datadog_agent::params::dd_groups,
   $apm_enabled = false,
   $apm_env = '',
+  $process_agent_enabled = false,
 ) inherits datadog_agent::params {
 
   # Allow ports to be passed as integers or strings.
@@ -333,6 +338,7 @@ class datadog_agent(
   validate_bool($apm_enabled)
   validate_bool($agent6_enable)
   validate_string($apm_env)
+  validate_bool($process_agent_enabled)
 
   if $hiera_tags {
     $local_tags = hiera_array('datadog_agent::tags', [])
@@ -385,15 +391,21 @@ class datadog_agent(
     default: { fail("Class[datadog_agent]: Unsupported operatingsystem: ${::operatingsystem}") }
   }
 
+  if ($dd_groups) {
+    user { $dd_user:
+      groups => $dd_groups,
+      notify => Service[$datadog_agent::params::service_name],
+    }
+  }
+
   # required by reports even in agent5 scenario
   file { '/etc/datadog-agent':
     ensure  => directory,
     owner   => $dd_user,
     group   => $dd_group,
     mode    => '0755',
-    require => Package['datadog-agent'],
+    require => Package[$datadog_agent::params::package_name],
   }
-
 
   if !$agent6_enable {
     file { '/etc/dd-agent':
@@ -401,7 +413,7 @@ class datadog_agent(
       owner   => $dd_user,
       group   => $dd_group,
       mode    => '0755',
-      require => Package['datadog-agent'],
+      require => Package[$datadog_agent::params::package_name],
     }
 
     file { $conf_dir:
@@ -411,7 +423,7 @@ class datadog_agent(
       force   => $conf_dir_purge,
       owner   => $dd_user,
       group   => $dd_group,
-      notify  => Service['datadog-agent']
+      notify  => Service[$datadog_agent::params::service_name]
     }
 
     concat {'/etc/dd-agent/datadog.conf':
@@ -465,7 +477,7 @@ class datadog_agent(
       force   => $conf_dir_purge,
       owner   => $dd_user,
       group   => $dd_group,
-      notify  => Service['datadog-agent']
+      notify  => Service[$datadog_agent::params::service_name]
     }
 
     $agent_config = {
